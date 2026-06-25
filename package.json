@@ -7,16 +7,6 @@
     "node": ">=20",
     "pnpm": ">=9"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@nestjs/core",
-      "@prisma/client",
-      "@prisma/engines",
-      "@scarf/scarf",
-      "bcrypt",
-      "prisma"
-    ]
-  },
   "scripts": {
     "backend:dev": "pnpm --filter @salesflow/backend start:dev",
     "backend:build": "pnpm --filter @salesflow/backend build",
