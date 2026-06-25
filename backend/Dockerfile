@@ -31,12 +31,13 @@ FROM node:22-alpine AS runner
 ENV NODE_ENV=production
 WORKDIR /app
 
-# node_modules ya contiene el cliente Prisma generado
-COPY --from=builder /app/node_modules        ./node_modules
-COPY --from=builder /app/backend/dist        ./backend/dist
-COPY --from=builder /app/backend/prisma      ./backend/prisma
-COPY package.json                            ./
-COPY backend/package.json                   ./backend/
+# pnpm workspace: deps en node_modules raíz + backend/node_modules (symlinks)
+COPY --from=builder /app/node_modules         ./node_modules
+COPY --from=builder /app/backend/node_modules ./backend/node_modules
+COPY --from=builder /app/backend/dist         ./backend/dist
+COPY --from=builder /app/backend/prisma       ./backend/prisma
+COPY package.json                             ./
+COPY backend/package.json                    ./backend/
 
 EXPOSE 3000
 
