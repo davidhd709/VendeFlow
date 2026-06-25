@@ -97,6 +97,11 @@ jobs:
             echo "── Ir al directorio de deploy ─────────────────"
             cd "$DEPLOY_PATH"
 
+            echo "── Actualizar docker-compose.prod.yml ─────────"
+            # Descargar la versión más reciente del repo
+            curl -fsSL "https://raw.githubusercontent.com/${{ github.repository }}/main/docker-compose.prod.yml" \
+              -o docker-compose.prod.yml
+
             echo "── Actualizar tags de imágenes ────────────────"
             # Actualiza (o crea) las variables de imagen en .env.deploy
             grep -q "^BACKEND_IMAGE="  .env.deploy 2>/dev/null \
