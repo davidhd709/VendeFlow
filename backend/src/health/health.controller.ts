@@ -19,6 +19,6 @@ export class HealthController {
     } catch {
       db = 'down';
     }
-    return { status: 'ok', db, timestamp: new Date().toISOString() };
+    return { status: 'ok', db, timestamp: new Date().toISOString(), version: '1.0.0' };
   }
 }
