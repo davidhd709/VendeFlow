@@ -23,8 +23,7 @@ RUN pnpm --filter @salesflow/backend exec prisma generate
 RUN pnpm --filter @salesflow/backend build
 
 # pnpm deploy crea node_modules plano sin symlinks — ideal para producción
-RUN pnpm --filter @salesflow/backend deploy --prod /app/prod-deploy && \
-    cp -r /app/node_modules/.pnpm /app/prod-deploy/node_modules/.pnpm 2>/dev/null || true
+RUN pnpm --filter @salesflow/backend deploy --prod --legacy /app/prod-deploy
 
 # ── Etapa 3: imagen de producción ──────────────────────────────────────────
 FROM node:22-alpine AS runner
