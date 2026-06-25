@@ -64,6 +64,18 @@ const NAV: Record<Role, NavItem[]> = {
   ],
 };
 
+const MOBILE_NAV: Record<Role, NavItem[]> = {
+  [Role.SUPERADMIN]: NAV[Role.SUPERADMIN],
+  [Role.ADMIN]: [
+    { label: 'Inicio',  icon: 'pi pi-th-large', path: '/admin/dashboard' },
+    { label: 'Leads',   icon: 'pi pi-users',    path: '/admin/leads' },
+    { label: 'Ventas',  icon: 'pi pi-dollar',   path: '/admin/ventas' },
+    { label: 'Tareas',  icon: 'pi pi-check-square', path: '/admin/tareas' },
+  ],
+  [Role.COORDINADOR]: NAV[Role.COORDINADOR],
+  [Role.VENDEDOR]: NAV[Role.VENDEDOR],
+};
+
 const GROUP_TITLES: Record<NonNullable<NavItem['group']>, string> = {
   main: 'General',
   commerce: 'Comercial',
@@ -238,6 +250,38 @@ const GROUP_TITLES: Record<NonNullable<NavItem['group']>, string> = {
 
         <main class="content"><router-outlet /></main>
       </div>
+
+      <!-- Backdrop mobile cuando el sidebar está abierto -->
+      @if (!collapsed()) {
+        <div class="mobile-backdrop" (click)="toggle()"></div>
+      }
+
+      <!-- Bottom navigation (solo mobile) -->
+      <nav class="bottom-nav" aria-label="Navegación principal">
+        @for (item of mobileNavItems(); track item.path) {
+          <a [routerLink]="item.path" routerLinkActive="active" class="bottom-nav-item">
+            <i [class]="item.icon"></i>
+            <span>{{ item.label }}</span>
+          </a>
+        }
+        @if (hasMobileMore()) {
+          <button class="bottom-nav-item" type="button" (click)="toggle()" [class.active]="!collapsed()">
+            <i class="pi pi-grid"></i>
+            <span>Más</span>
+          </button>
+        }
+        @if (auth.role() !== 'SUPERADMIN') {
+          <button class="bottom-nav-item" type="button" (click)="toggleAlerts()" [class.has-alerts]="alertCount() > 0">
+            <span class="bottom-bell-wrap">
+              <i class="pi pi-bell"></i>
+              @if (alertCount() > 0) {
+                <span class="bottom-bell-badge">{{ alertCount() > 9 ? '9+' : alertCount() }}</span>
+              }
+            </span>
+            <span>Alertas</span>
+          </button>
+        }
+      </nav>
     </div>
 
     <p-dialog
@@ -649,6 +693,9 @@ const GROUP_TITLES: Record<NonNullable<NavItem['group']>, string> = {
         flex: 1;
       }
 
+      /* ── Bottom nav (siempre oculto en desktop) ── */
+      .bottom-nav { display: none; }
+
       /* Responsive: collapse sidebar to off-canvas */
       @media (max-width: 920px) {
         .shell { grid-template-columns: 1fr; }
@@ -665,6 +712,143 @@ const GROUP_TITLES: Record<NonNullable<NavItem['group']>, string> = {
           box-shadow: var(--sf-shadow-lg);
         }
         .shell:not(.collapsed) .sidebar { transform: translateX(0); }
+      }
+
+      /* ── Mobile: bottom navigation app-style ── */
+      @media (max-width: 768px) {
+        /* Ocultar hamburguesa — la nav está abajo */
+        .hamb { display: none; }
+
+        /* El contenido no queda tapado por el bottom nav */
+        .content {
+          padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+        }
+
+        /* Backdrop oscuro cuando el sidebar-drawer está abierto */
+        .mobile-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.45);
+          z-index: 40;
+          backdrop-filter: blur(2px);
+        }
+
+        /* Bottom nav bar */
+        .bottom-nav {
+          display: flex;
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          height: calc(60px + env(safe-area-inset-bottom, 0px));
+          padding-bottom: env(safe-area-inset-bottom, 0px);
+          background: rgba(15, 23, 42, 0.96);
+          backdrop-filter: saturate(160%) blur(12px);
+          border-top: 1px solid rgba(148, 163, 184, 0.12);
+          z-index: 30;
+          align-items: stretch;
+        }
+
+        .bottom-nav-item {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 3px;
+          padding: 6px 4px 4px;
+          color: #64748b;
+          text-decoration: none;
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          font-family: inherit;
+          font-size: 0.62rem;
+          font-weight: 500;
+          letter-spacing: 0.01em;
+          transition: color 0.15s var(--sf-ease);
+          -webkit-tap-highlight-color: transparent;
+          min-width: 0;
+        }
+
+        .bottom-nav-item i {
+          font-size: 1.25rem;
+          line-height: 1;
+          transition: transform 0.15s var(--sf-ease);
+        }
+
+        .bottom-nav-item span {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 100%;
+        }
+
+        .bottom-nav-item:active i {
+          transform: scale(0.88);
+        }
+
+        .bottom-nav-item.active {
+          color: #60a5fa;
+        }
+
+        .bottom-nav-item.active i {
+          color: #3b82f6;
+          filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.5));
+        }
+
+        .bottom-nav-item.has-alerts {
+          color: #f87171;
+        }
+
+        /* Badge en el botón de alertas del bottom nav */
+        .bottom-bell-wrap {
+          position: relative;
+          display: inline-flex;
+        }
+
+        .bottom-bell-badge {
+          position: absolute;
+          top: -5px;
+          right: -7px;
+          background: #dc2626;
+          color: #fff;
+          font-size: 0.55rem;
+          font-weight: 700;
+          min-width: 15px;
+          height: 15px;
+          padding: 0 2px;
+          border-radius: 999px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border: 1.5px solid rgba(15, 23, 42, 0.96);
+        }
+
+        /* Panel de alertas: en mobile ocupa todo el ancho */
+        .alerts-panel {
+          position: fixed;
+          bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+          left: 8px;
+          right: 8px;
+          width: auto;
+          max-height: 60vh;
+          border-radius: 16px 16px 12px 12px;
+        }
+
+        /* Topbar en mobile: más compacto */
+        .topbar {
+          padding: 0.6rem 1rem;
+        }
+
+        /* Ocultar bell del topbar en mobile (está en bottom nav) */
+        .bell-wrap { display: none; }
+
+        /* Company chip más compacto */
+        .company-chip {
+          font-size: 0.72rem;
+          padding: 0.3rem 0.6rem;
+        }
       }
     `,
   ],
@@ -705,6 +889,17 @@ export class DashboardLayoutComponent implements OnInit {
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe((e) => this.updateTitle(e.urlAfterRedirects));
   }
+
+  mobileNavItems = computed(() => {
+    const role = this.auth.role();
+    return role ? MOBILE_NAV[role] : [];
+  });
+
+  hasMobileMore = computed(() => {
+    const role = this.auth.role();
+    if (!role) return false;
+    return NAV[role].length > MOBILE_NAV[role].length;
+  });
 
   groupedNav = computed(() => {
     const role = this.auth.role();
