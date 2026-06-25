@@ -7,19 +7,7 @@ import { MessageModule } from 'primeng/message';
 import { AuthService } from '@core/auth/auth.service';
 import { ROLE_HOME } from '@core/constants/roles';
 import { ApiError } from '@core/models/api-error.model';
-
-function extractSubdomain(): string {
-  const host = window.location.hostname;
-  // IP → sin subdominio
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) return '';
-  const parts = host.split('.');
-  // "localhost" solo → sin subdominio
-  if (parts.length === 1) return '';
-  // "wincell.localhost" → subdominio "wincell" (dev local con subdominios)
-  if (parts.length === 2 && parts[1] === 'localhost') return parts[0];
-  // "wincell.salesflow.com" o "wincell.salesflow.co" → subdominio "wincell"
-  return parts.length >= 3 ? parts[0] : '';
-}
+import { extractSubdomainFromHostname } from '@core/utils/public-subdomain.util';
 
 @Component({
   selector: 'app-login',
@@ -271,7 +259,7 @@ export class LoginComponent {
   loading = signal(false);
   error = signal<string | null>(null);
 
-  readonly detectedSubdomain = extractSubdomain();
+  readonly detectedSubdomain = extractSubdomainFromHostname(window.location.hostname);
 
   form = this.fb.nonNullable.group({
     subdomain: [this.detectedSubdomain],
