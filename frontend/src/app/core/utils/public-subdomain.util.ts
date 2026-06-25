@@ -1,5 +1,5 @@
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '[::1]']);
-const RESERVED_SUBDOMAINS = new Set(['www']);
+const RESERVED_SUBDOMAINS = new Set(['www', 'vendeflow', 'app', 'api', 'admin']);
 const SUBDOMAIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
 
 function normalizeCandidate(value: string | null | undefined): string {
