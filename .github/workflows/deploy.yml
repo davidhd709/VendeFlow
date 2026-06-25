@@ -124,9 +124,20 @@ jobs:
               --env-file .env.deploy \
               up -d --remove-orphans
 
+            echo "── Estado del backend ─────────────────────────"
+            docker ps -a --filter name=ventasflow-backend --format "{{.Status}}"
+            docker logs --tail 30 ventasflow-backend || true
+
             echo "── Migraciones Prisma ─────────────────────────"
-            docker exec ventasflow-backend \
-              /app/backend/node_modules/.bin/prisma migrate deploy
+            # Contenedor one-shot: no depende del estado del backend en ejecución
+            NETWORK=$(docker inspect ventasflow-postgres \
+              --format='{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}' 2>/dev/null \
+              || echo "ventasflow_default")
+            docker run --rm \
+              --network "$NETWORK" \
+              --env-file "$DEPLOY_PATH/.env.prod" \
+              "$BACKEND_IMAGE" \
+              node /app/backend/node_modules/prisma/build/index.js migrate deploy
 
             echo "── Limpiar imágenes antiguas ──────────────────"
             docker image prune -f
