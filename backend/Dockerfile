@@ -4,7 +4,7 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 
 # Herramientas para compilar módulos nativos (bcrypt, lmdb, etc.)
-RUN apk add --no-cache python3 make g++ && corepack enable
+RUN corepack enable
 
 WORKDIR /app
 
@@ -13,7 +13,7 @@ COPY backend/package.json  ./backend/
 COPY frontend/package.json ./frontend/
 
 RUN pnpm install --frozen-lockfile --ignore-scripts && \
-    pnpm rebuild @prisma/engines bcrypt esbuild lmdb msgpackr-extract @parcel/watcher
+    pnpm rebuild @prisma/engines esbuild lmdb msgpackr-extract @parcel/watcher
 
 # ── Etapa 2: build ──────────────────────────────────────────────────────────
 FROM deps AS builder
