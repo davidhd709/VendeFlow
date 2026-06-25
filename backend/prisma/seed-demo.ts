@@ -10,7 +10,7 @@
  * Es idempotente: borra las 3 empresas demo antes de recrearlas.
  */
 import { PrismaClient, LeadStatus, ProductCondition, FollowUpChannel, TaskStatus } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
