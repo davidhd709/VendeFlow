@@ -137,7 +137,8 @@ jobs:
               --network "$NETWORK" \
               --env-file "$DEPLOY_PATH/.env.prod" \
               "$BACKEND_IMAGE" \
-              node /app/backend/node_modules/prisma/build/index.js migrate deploy
+              node /app/backend/node_modules/prisma/build/index.js migrate deploy \
+              --schema /app/backend/prisma/schema.prisma
 
             echo "── Limpiar imágenes antiguas ──────────────────"
             docker image prune -f
