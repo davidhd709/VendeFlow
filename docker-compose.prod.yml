@@ -35,9 +35,7 @@ services:
     container_name: ventasflow-frontend
     restart: unless-stopped
     ports:
-      - "80:80"
-      # Descomentar tras configurar Certbot:
-      # - "443:443"
+      - "8082:80"
     depends_on:
       - backend
     volumes:
