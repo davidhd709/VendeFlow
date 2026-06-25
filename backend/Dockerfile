@@ -11,7 +11,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY backend/package.json  ./backend/
 COPY frontend/package.json ./frontend/
 
-RUN pnpm install --frozen-lockfile
+# pnpm 11 bloquea build scripts por defecto; instalamos sin scripts
+# y reconstruimos solo los módulos nativos necesarios
+RUN pnpm install --frozen-lockfile --ignore-scripts && \
+    pnpm rebuild @prisma/engines bcrypt esbuild lmdb msgpackr-extract @parcel/watcher
 
 # ── Etapa 2: build ──────────────────────────────────────────────────────────
 FROM deps AS builder
