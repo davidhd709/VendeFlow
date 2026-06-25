@@ -1,0 +1,133 @@
+name: Deploy
+
+# Se dispara cuando el workflow "CI" termina exitosamente en main
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches: [main]
+    types: [completed]
+
+env:
+  REGISTRY:        ghcr.io
+  BACKEND_IMAGE:   ghcr.io/${{ github.repository_owner }}/ventasflow-backend
+  FRONTEND_IMAGE:  ghcr.io/${{ github.repository_owner }}/ventasflow-frontend
+
+jobs:
+
+  # ── 1. Build y push de imágenes Docker ──────────────────────────────────
+  build-and-push:
+    name: Build & Push Docker images
+    # Solo continuar si CI pasó
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # necesario para ghcr.io
+    outputs:
+      sha_short: ${{ steps.vars.outputs.sha_short }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Obtener SHA corto
+        id: vars
+        run: echo "sha_short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login a GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build y push — Backend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file:    ./backend/Dockerfile
+          push:    true
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:${{ steps.vars.outputs.sha_short }}
+            ${{ env.BACKEND_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+      - name: Build y push — Frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file:    ./frontend/Dockerfile
+          push:    true
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:${{ steps.vars.outputs.sha_short }}
+            ${{ env.FRONTEND_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+  # ── 2. Deploy al VPS ────────────────────────────────────────────────────
+  deploy:
+    name: Deploy al VPS
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: SSH y desplegar
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          BACKEND_IMAGE:  ${{ env.BACKEND_IMAGE }}:${{ needs.build-and-push.outputs.sha_short }}
+          FRONTEND_IMAGE: ${{ env.FRONTEND_IMAGE }}:${{ needs.build-and-push.outputs.sha_short }}
+          DEPLOY_PATH:    ${{ secrets.DEPLOY_PATH }}
+          GHCR_USER:      ${{ github.actor }}
+          GHCR_TOKEN:     ${{ secrets.GHCR_TOKEN }}
+        with:
+          host:     ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key:      ${{ secrets.VPS_SSH_KEY }}
+          envs:     BACKEND_IMAGE,FRONTEND_IMAGE,DEPLOY_PATH,GHCR_USER,GHCR_TOKEN
+          script: |
+            set -e
+
+            echo "── Autenticar en ghcr.io ──────────────────────"
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+            echo "── Ir al directorio de deploy ─────────────────"
+            cd "$DEPLOY_PATH"
+
+            echo "── Actualizar tags de imágenes ────────────────"
+            # Actualiza (o crea) las variables de imagen en .env.deploy
+            grep -q "^BACKEND_IMAGE="  .env.deploy 2>/dev/null \
+              && sed -i "s|^BACKEND_IMAGE=.*|BACKEND_IMAGE=$BACKEND_IMAGE|"  .env.deploy \
+              || echo "BACKEND_IMAGE=$BACKEND_IMAGE"  >> .env.deploy
+
+            grep -q "^FRONTEND_IMAGE=" .env.deploy 2>/dev/null \
+              && sed -i "s|^FRONTEND_IMAGE=.*|FRONTEND_IMAGE=$FRONTEND_IMAGE|" .env.deploy \
+              || echo "FRONTEND_IMAGE=$FRONTEND_IMAGE" >> .env.deploy
+
+            echo "── Pull de nuevas imágenes ────────────────────"
+            docker compose -f docker-compose.prod.yml \
+              --env-file .env.prod \
+              --env-file .env.deploy \
+              pull
+
+            echo "── Levantar servicios ─────────────────────────"
+            docker compose -f docker-compose.prod.yml \
+              --env-file .env.prod \
+              --env-file .env.deploy \
+              up -d --remove-orphans
+
+            echo "── Migraciones Prisma ─────────────────────────"
+            docker compose -f docker-compose.prod.yml \
+              --env-file .env.prod \
+              --env-file .env.deploy \
+              exec -T backend node backend/node_modules/prisma/build/index.js migrate deploy \
+              || docker exec ventasflow-backend \
+                   node /app/node_modules/prisma/build/index.js migrate deploy
+
+            echo "── Limpiar imágenes antiguas ──────────────────"
+            docker image prune -f
+
+            echo "✅ Deploy completado: $BACKEND_IMAGE"

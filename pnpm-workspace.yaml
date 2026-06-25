@@ -1,0 +1,13 @@
+packages:
+  - 'backend'
+  - 'frontend'
+
+# pnpm 10 ignora postinstall por defecto; autorizamos los builds nativos necesarios.
+onlyBuiltDependencies:
+  - '@nestjs/core'
+  - '@prisma/client'
+  - '@prisma/engines'
+  - '@scarf/scarf'
+  - bcrypt
+  - prisma
+  - esbuild

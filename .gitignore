@@ -1,0 +1,56 @@
+# Dependencias
+node_modules/
+.pnpm-store/
+
+# Builds
+dist/
+build/
+.angular/
+out-tsc/
+
+# Entorno
+.env
+.env.local
+.env.*.local
+!.env.example
+.npmrc
+
+# Secretos de producción (NUNCA en git)
+.env.prod
+deploy/nginx.ssl.conf.current
+
+# Prisma
+backend/prisma/*.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Coverage / tests
+coverage/
+test-results/
+playwright-report/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Herramientas de IA (agentes, skills, MCP) — nunca exponer al repo
+.agents/
+.claude
+.codex/
+.playwright-mcp/
+.qa-visual/
+qa-visual/
+AGENTS.md
+CLAUDE.md
+skills-lock.json
+prompt_*.md
+
+# Notas privadas de desarrollo — credenciales y plan local
+DEV-LOCAL.md
+PLAN.md

@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend (build + tenant isolation)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ventasflow
+          POSTGRES_PASSWORD: ventasflow
+          POSTGRES_DB: ventasflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ventasflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ventasflow:ventasflow@localhost:5432/ventasflow?schema=public
+      JWT_SECRET: ci_jwt_secret_min_32_chars_aaaaaaaaaaaaaaa
+      JWT_REFRESH_SECRET: ci_jwt_refresh_secret_min_32_chars_bbbbbbb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Prisma generate
+        run: pnpm --filter @ventasflow/backend prisma:generate
+      - name: Aplicar migraciones
+        run: pnpm --filter @ventasflow/backend exec prisma migrate deploy
+      - name: Build
+        run: pnpm --filter @ventasflow/backend build
+      - name: Tests (tenant isolation + unitarios)
+        run: pnpm --filter @ventasflow/backend test
+
+  frontend:
+    name: Frontend (build + tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm --filter @ventasflow/frontend build
+      - name: Tests
+        run: pnpm --filter @ventasflow/frontend test

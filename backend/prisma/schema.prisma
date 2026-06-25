@@ -1,0 +1,628 @@
+// SalesFlow Celulares — Esquema de datos
+// SaaS multitenant. Regla invariante: toda entidad tenant-owned lleva companyId.
+// El companyId SIEMPRE se deriva de req.user en el backend, nunca del body/params.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────
+
+enum Role {
+  SUPERADMIN
+  ADMIN
+  COORDINADOR
+  VENDEDOR
+}
+
+enum CompanyStatus {
+  ACTIVE
+  SUSPENDED
+  TRIAL
+}
+
+enum LeadStatus {
+  NUEVO
+  CONTACTADO
+  EN_SEGUIMIENTO
+  INTERESADO
+  VENDIDO
+  PERDIDO
+  SIN_RESPUESTA
+}
+
+enum TaskStatus {
+  PENDIENTE
+  EN_PROGRESO
+  COMPLETADA
+  VENCIDA
+}
+
+enum CampaignStatus {
+  BORRADOR
+  ENVIADA
+}
+
+enum ProductCondition {
+  NUEVO
+  USADO
+  REACONDICIONADO
+}
+
+enum FollowUpChannel {
+  WHATSAPP
+  LLAMADA
+  PRESENCIAL
+  EMAIL
+  OTRO
+}
+
+enum WebsitePageStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum WebsiteSectionType {
+  NAVBAR
+  HERO
+  FEATURED_PRODUCTS
+  SERVICES
+  BENEFITS
+  OFFICES
+  FAQ
+  CTA
+  CONTACT
+  FOOTER
+}
+
+// ─────────────────────────────────────────────────────────
+// NÚCLEO / TENANT
+// ─────────────────────────────────────────────────────────
+
+model Company {
+  id        String        @id @default(uuid())
+  name      String
+  slug      String        @unique
+  subdomain String        @unique
+  status    CompanyStatus @default(ACTIVE)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  users          User[]
+  offices        Office[]
+  products       Product[]
+  productStocks  ProductStock[]
+  leads          Lead[]
+  leadInterests  LeadProductInterest[]
+  followUps      FollowUp[]
+  sales          Sale[]
+  tasks          Task[]
+  comments       InternalComment[]
+  campaigns      Campaign[]
+  templates      MessageTemplate[]
+  goals          MonthlyGoal[]
+  auditLogs      AuditLog[]
+  sellerLinks         SellerAssignment[]
+  coordinatorOffices  CoordinatorOffice[]
+  statusHistory       LeadStatusHistory[]
+  websiteConfig  WebsiteConfig?
+  websitePages    WebsitePage[]
+  websiteSections WebsiteSection[]
+  notifications   Notification[]
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String // credencial de login (único por empresa)
+  email        String? // opcional, solo contacto
+  passwordHash String
+  name         String
+  role         Role
+  companyId    String? // null SOLO para SUPERADMIN
+  officeId     String?
+  isActive           Boolean  @default(true)
+  mustChangePassword Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company       Company? @relation(fields: [companyId], references: [id])
+  office        Office?  @relation(fields: [officeId], references: [id])
+  assignedLeads Lead[]                @relation("LeadSeller")
+  followUps     FollowUp[]
+  sales         Sale[]
+  assignedTasks Task[]                @relation("TaskAssignee")
+  createdTasks  Task[]                @relation("TaskCreator")
+  comments      InternalComment[]
+  campaigns     Campaign[]
+  templates     MessageTemplate[]
+  goals         MonthlyGoal[]
+  auditLogs     AuditLog[]
+  refreshTokens RefreshToken[]
+  notifications Notification[]
+  asCoordinator        SellerAssignment[]     @relation("CoordinatorLink")
+  asSeller             SellerAssignment[]     @relation("SellerLink")
+  coordinatorOffices   CoordinatorOffice[]    @relation("CoordinatorOffices")
+
+  // username único por empresa. Para SUPERADMIN (companyId null) la unicidad
+  // se valida en el servicio, porque Postgres trata los NULL como distintos.
+  @@unique([companyId, username])
+  @@index([companyId])
+  @@index([officeId])
+}
+
+// Coordinador → vendedores supervisados (filtros del rol COORDINADOR)
+model SellerAssignment {
+  id            String   @id @default(uuid())
+  companyId     String
+  coordinatorId String
+  sellerId      String
+  createdAt     DateTime @default(now())
+
+  company     Company @relation(fields: [companyId], references: [id])
+  coordinator User    @relation("CoordinatorLink", fields: [coordinatorId], references: [id])
+  seller      User    @relation("SellerLink", fields: [sellerId], references: [id])
+
+  @@unique([coordinatorId, sellerId])
+  @@index([companyId])
+  @@index([sellerId])
+}
+
+model Office {
+  id        String   @id @default(uuid())
+  companyId String
+  name      String
+  address   String?
+  city      String?
+  phone     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company            Company           @relation(fields: [companyId], references: [id])
+  users              User[]
+  leads              Lead[]
+  sales              Sale[]
+  stocks             ProductStock[]
+  goals              MonthlyGoal[]
+  coordinatorLinks   CoordinatorOffice[]
+
+  @@index([companyId])
+}
+
+// Coordinador → oficinas que supervisa (relación M:N)
+model CoordinatorOffice {
+  id            String   @id @default(uuid())
+  companyId     String
+  coordinatorId String
+  officeId      String
+  createdAt     DateTime @default(now())
+
+  company     Company @relation(fields: [companyId], references: [id])
+  coordinator User    @relation("CoordinatorOffices", fields: [coordinatorId], references: [id])
+  office      Office  @relation(fields: [officeId], references: [id])
+
+  @@unique([coordinatorId, officeId])
+  @@index([companyId])
+  @@index([officeId])
+}
+
+model Product {
+  id          String           @id @default(uuid())
+  companyId   String
+  name        String
+  slug        String
+  description String?
+  brand       String?
+  model       String?
+  ram         String? // ej. "8GB"
+  storage     String? // ej. "128GB"
+  color       String?
+  condition   ProductCondition @default(NUEVO)
+  warranty    String? // ej. "12 meses"
+  price       Decimal          @db.Decimal(12, 2)
+  imageUrl    String? // portada para tarjetas de catálogo
+  images      String[] // galería (URLs de Cloudinary)
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  company       Company               @relation(fields: [companyId], references: [id])
+  stocks        ProductStock[]
+  sales         Sale[]
+  leadInterests LeadProductInterest[]
+
+  @@unique([companyId, slug])
+  @@index([companyId])
+}
+
+// Inventario por oficina
+model ProductStock {
+  id        String   @id @default(uuid())
+  companyId String
+  productId String
+  officeId  String
+  quantity  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  office  Office  @relation(fields: [officeId], references: [id])
+
+  @@unique([productId, officeId])
+  @@index([companyId])
+  @@index([officeId])
+}
+
+// ─────────────────────────────────────────────────────────
+// CRM
+// ─────────────────────────────────────────────────────────
+
+model Lead {
+  id              String     @id @default(uuid())
+  companyId       String
+  officeId        String?
+  sellerId        String?
+  name            String
+  phone           String
+  email           String?
+  status          LeadStatus @default(NUEVO)
+  source          String?
+  notes           String?
+  documentType    String?   // CC, CE, NIT, Pasaporte, Otro
+  documentNumber  String?
+  activationDate  DateTime? // fecha en que el cliente compró / se activó
+  lastContactedAt DateTime? // denormalizado para la alerta "sin contacto > 48h"
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  company         Company               @relation(fields: [companyId], references: [id])
+  office          Office?               @relation(fields: [officeId], references: [id])
+  seller          User?                 @relation("LeadSeller", fields: [sellerId], references: [id])
+  sale            Sale?
+  comments        InternalComment[]
+  tasks           Task[]
+  followUps       FollowUp[]
+  history         LeadStatusHistory[]
+  productInterest LeadProductInterest[]
+  recipients      CampaignRecipient[]
+
+  @@index([companyId])
+  @@index([officeId])
+  @@index([sellerId])
+  @@index([companyId, status])
+}
+
+// Un lead puede consultar varios productos
+model LeadProductInterest {
+  id        String   @id @default(uuid())
+  companyId String
+  leadId    String
+  productId String
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+  lead    Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([leadId, productId])
+  @@index([companyId])
+  @@index([productId])
+}
+
+// Historial real de seguimientos
+model FollowUp {
+  id           String          @id @default(uuid())
+  companyId    String
+  leadId       String
+  sellerId     String
+  channel      FollowUpChannel @default(WHATSAPP)
+  notes        String
+  nextActionAt DateTime?
+  createdAt    DateTime        @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+  lead    Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  seller  User    @relation(fields: [sellerId], references: [id])
+
+  @@index([companyId])
+  @@index([leadId])
+}
+
+// Historial de transiciones de estado (regla de dominio: toda transición se registra)
+model LeadStatusHistory {
+  id        String      @id @default(uuid())
+  companyId String
+  leadId    String
+  fromState LeadStatus?
+  toState   LeadStatus
+  changedBy String
+  createdAt DateTime    @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+  lead    Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([companyId])
+}
+
+model Sale {
+  id        String   @id @default(uuid())
+  companyId String
+  officeId  String?
+  leadId    String   @unique // una venta por lead
+  sellerId  String
+  productId String?
+  amount    Decimal  @db.Decimal(12, 2)
+  notes     String?
+  saleDate  DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company  @relation(fields: [companyId], references: [id])
+  office  Office?  @relation(fields: [officeId], references: [id])
+  lead    Lead     @relation(fields: [leadId], references: [id])
+  seller  User     @relation(fields: [sellerId], references: [id])
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@index([companyId])
+  @@index([officeId])
+  @@index([sellerId])
+  @@index([saleDate])
+}
+
+model Task {
+  id           String     @id @default(uuid())
+  companyId    String
+  assignedToId String
+  createdById  String
+  leadId       String?
+  title        String
+  description  String?
+  status       TaskStatus @default(PENDIENTE)
+  dueDate      DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  company    Company @relation(fields: [companyId], references: [id])
+  assignedTo User    @relation("TaskAssignee", fields: [assignedToId], references: [id])
+  createdBy  User    @relation("TaskCreator", fields: [createdById], references: [id])
+  lead       Lead?   @relation(fields: [leadId], references: [id])
+
+  @@index([companyId])
+  @@index([assignedToId])
+  @@index([status])
+}
+
+model InternalComment {
+  id        String   @id @default(uuid())
+  companyId String
+  leadId    String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+  lead    Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id])
+
+  @@index([companyId])
+  @@index([leadId])
+}
+
+// ─────────────────────────────────────────────────────────
+// CAMPAÑAS WHATSAPP
+// ─────────────────────────────────────────────────────────
+
+model MessageTemplate {
+  id          String   @id @default(uuid())
+  companyId   String
+  name        String
+  body        String
+  isActive    Boolean  @default(true)
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company   Company    @relation(fields: [companyId], references: [id])
+  createdBy User       @relation(fields: [createdById], references: [id])
+  campaigns Campaign[]
+
+  @@index([companyId])
+}
+
+model Campaign {
+  id          String         @id @default(uuid())
+  companyId   String
+  createdById String
+  templateId  String?
+  name        String
+  message     String
+  status      CampaignStatus @default(BORRADOR)
+  sentAt      DateTime?
+  createdAt   DateTime       @default(now())
+
+  company    Company             @relation(fields: [companyId], references: [id])
+  createdBy  User                @relation(fields: [createdById], references: [id])
+  template   MessageTemplate?    @relation(fields: [templateId], references: [id])
+  recipients CampaignRecipient[]
+  // Límite de 10 destinatarios se valida en el backend (CampaignsService), no en el esquema.
+
+  @@index([companyId])
+}
+
+model CampaignRecipient {
+  id         String   @id @default(uuid())
+  campaignId String
+  leadId     String?
+  name       String // snapshot al momento del envío
+  phone      String
+  waLink     String
+  createdAt  DateTime @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  lead     Lead?    @relation(fields: [leadId], references: [id])
+
+  @@index([campaignId])
+}
+
+// ─────────────────────────────────────────────────────────
+// METAS
+// ─────────────────────────────────────────────────────────
+
+model MonthlyGoal {
+  id           String   @id @default(uuid())
+  companyId    String
+  officeId     String?
+  userId       String?
+  year         Int
+  month        Int // 1-12
+  targetAmount Decimal  @db.Decimal(12, 2)
+  targetSales  Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+  office  Office? @relation(fields: [officeId], references: [id])
+  user    User?   @relation(fields: [userId], references: [id])
+
+  // Nota: con userId/officeId nulos Postgres no garantiza unicidad (NULL distinto).
+  // La unicidad de metas a nivel empresa se valida en GoalsService.
+  @@unique([companyId, userId, officeId, year, month])
+  @@index([companyId])
+}
+
+// ─────────────────────────────────────────────────────────
+// WEB PÚBLICA
+// ─────────────────────────────────────────────────────────
+
+model WebsiteConfig {
+  id           String   @id @default(uuid())
+  companyId    String   @unique
+  heroTitle    String?
+  heroSubtitle String?
+  primaryColor String?
+  logoUrl      String?
+  banners      Json? // [{ imageUrl, link, alt }]
+  services     Json? // [{ title, description, icon }]
+  faq          Json? // [{ question, answer }]
+  contactPhone String?
+  contactEmail String?
+  address      String?
+  updatedAt    DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────
+// AUDITORÍA Y SEGURIDAD
+// ─────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  companyId  String? // null en eventos de plataforma (ej. login.failed sin tenant)
+  actorId    String?
+  actorRole  Role?
+  action     String // "sale.registered", "lead.status_changed", ...
+  targetId   String?
+  targetType String?
+  ip         String?
+  metadata   Json? // nunca PII cruda, tokens ni passwords
+  createdAt  DateTime @default(now())
+
+  company Company? @relation(fields: [companyId], references: [id])
+  actor   User?    @relation(fields: [actorId], references: [id])
+
+  @@index([companyId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique // se guarda el hash, nunca el token en claro
+  expiresAt DateTime
+  revokedAt DateTime?
+  userAgent String?
+  ip        String?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────
+// WEBSITE BUILDER (CMS por bloques controlados)
+// ─────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────
+// NOTIFICACIONES (eventos de equipo: comentarios, seguimientos, asignaciones)
+// ─────────────────────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(uuid())
+  companyId String
+  userId    String   // receptor
+  type      String   // 'COMMENT_ADDED' | 'FOLLOWUP_ADDED' | 'LEAD_ASSIGNED'
+  title     String
+  body      String
+  leadId    String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([companyId, userId, isRead])
+}
+
+// ─────────────────────────────────────────────────────────
+// WEBSITE BUILDER (CMS por bloques controlados)
+// ─────────────────────────────────────────────────────────
+
+model WebsitePage {
+  id                String            @id @default(uuid())
+  companyId         String
+  slug              String // "home", "promo-mayo"...
+  title             String
+  status            WebsitePageStatus @default(DRAFT)
+  publishedSnapshot Json? // snapshot ordenado de secciones publicadas
+  publishedAt       DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  company  Company          @relation(fields: [companyId], references: [id])
+  sections WebsiteSection[]
+
+  // Una página por slug por empresa.
+  @@unique([companyId, slug])
+  @@index([companyId])
+}
+
+model WebsiteSection {
+  id        String             @id @default(uuid())
+  companyId String // denormalizado: queries tenant-safe sin joins
+  pageId    String
+  type      WebsiteSectionType
+  order     Int                @default(0)
+  visible   Boolean            @default(true)
+  data      Json // contenido específico al type (schema controlado)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  company Company     @relation(fields: [companyId], references: [id])
+  page    WebsitePage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([pageId, order])
+}

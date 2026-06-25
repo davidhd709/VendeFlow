@@ -1,0 +1,33 @@
+{
+  "name": "salesflow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SalesFlow Celulares — SaaS multitenant para tiendas de celulares (Angular + NestJS)",
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@nestjs/core",
+      "@prisma/client",
+      "@prisma/engines",
+      "@scarf/scarf",
+      "bcrypt",
+      "prisma"
+    ]
+  },
+  "scripts": {
+    "backend:dev": "pnpm --filter @salesflow/backend start:dev",
+    "backend:build": "pnpm --filter @salesflow/backend build",
+    "backend:test": "pnpm --filter @salesflow/backend test",
+    "backend:migrate": "pnpm --filter @salesflow/backend prisma:migrate",
+    "backend:studio": "pnpm --filter @salesflow/backend prisma:studio",
+    "frontend:dev": "pnpm --filter @salesflow/frontend start",
+    "frontend:build": "pnpm --filter @salesflow/frontend build",
+    "frontend:test": "pnpm --filter @salesflow/frontend test",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "test": "pnpm -r test"
+  }
+}
