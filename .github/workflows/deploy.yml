@@ -125,12 +125,10 @@ jobs:
               up -d --remove-orphans
 
             echo "── Migraciones Prisma ─────────────────────────"
-            docker compose -f docker-compose.prod.yml \
-              --env-file .env.prod \
-              --env-file .env.deploy \
-              exec -T backend node backend/node_modules/prisma/build/index.js migrate deploy \
+            docker exec ventasflow-backend \
+              node /app/node_modules/prisma/build/index.js migrate deploy \
               || docker exec ventasflow-backend \
-                   node /app/node_modules/prisma/build/index.js migrate deploy
+                   node /app/node_modules/.bin/prisma migrate deploy
 
             echo "── Limpiar imágenes antiguas ──────────────────"
             docker image prune -f
